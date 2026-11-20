@@ -32,6 +32,7 @@ ckpt/
 *.pickle
 *.npy
 *.wav
+!/audio/*.wav
 
 #===============================================================================
 # python additions
@@ -149,6 +150,7 @@ google-services.json
 # .env.local, .env.development, 
 # .env.production, .env.staging
 .env*
+!/.env.example
 .envrc
 !.env.example
 #===============================================================================
