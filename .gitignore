@@ -32,7 +32,7 @@ ckpt/
 *.pickle
 *.npy
 *.wav
-!/audio/*.wav
+!/docs/presentation/audio/*.wav
 
 #===============================================================================
 # python additions
@@ -204,7 +204,6 @@ agent_tools/
 docs/*
 !docs/assessment/
 !docs/presentation/
-docs/presentation/audio/
 !docs/flow/
 !docs/background/
 !docs/modules/
