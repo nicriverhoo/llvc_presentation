@@ -3,28 +3,43 @@
 <title>LLVC LTE · 语音转换对照实验</title>
 <link rel="stylesheet" href="slides.css"><script defer src="records.js"></script><script defer src="slides.js"></script></head>
 <body>
-<header><div class="brand">LLVC <span>LTE</span></div><div>端侧语音转换实验</div><time>2026.11.20</time></header>
+<header><div class="brand">LLVC <span>LTE</span></div><div>端侧语音转换实验</div><time>2026.11.25</time></header>
 <div class="shell"><aside><nav aria-label="章节" id="menu"></nav></aside>
-<main><section id="overview" data-title="算法概览">
+<main>
+<section id="overview" data-group="项目简介" data-title="算法概览">
 <p class="eyebrow">项目简介</p><h1>LLVC 端侧语音转换</h1>
 <p class="intro">保留说话内容，转换声音的音色。LLVC 面向端侧低延迟处理，在本项目中与 RVC、QuickVC 两条推理链使用同一批输入对照。</p>
 <figure><img src="input-wave.png" alt="Ch_m1 原音波形"><figcaption>Ch_m1.wav　·　试听样本的原始波形</figcaption></figure>
-<div class="family"><div><small>端侧主算法</small><h2>llvc</h2></div><div><b>输入波形 → 生成器 → 16 kHz 波形</b><p>流式缓存延续至下一块，每次推进 13 ms。生成器内部完成编码与解码。</p><code>cmodel0 · fmodel0 · vcmodel1 / 2 / 3</code></div></div>
-<div class="family"><div><small>项目内对比算法</small><h2>llvc/rvc</h2></div><div><b>ContentVec → 可选音色索引 → 条件合成</b><p>无 F0 权重直接使用内容特征。带 F0 权重还接收 RMVPE 提取并移调后的音高。本次流式新增窗口 100 ms。</p><code>cmodel1 · fmodel0 + vcmodel4　或　fmodel1 + vcmodel5–10</code></div></div>
-<div class="family"><div><small>项目内对比算法</small><h2>llvc/quickvc</h2></div><div><b>HuBERT-soft → QuickVC 合成器 → 16 kHz 波形</b><p>使用全零 Mel 音色条件，无独立音高提取器。本次流式新增窗口 100 ms。</p><code>cmodel2 · fmodel0 · vcmodel11</code></div></div>
+<div class="family"><div><small>端侧主算法</small><h2>llvc</h2></div><div><b>输入波形 → 生成器 → 16 kHz 波形</b><p>流式缓存延续至下一块，默认推进 13 ms（<code>cf=1</code>），并支持按倍数扩展块长（如 <code>cf=4</code>，52 ms）权衡吞吐与时延。生成器内部完成编码与解码。</p><code>cmodel0 · fmodel0 · vcmodel1 / 2 / 3</code></div></div>
+<div class="family"><div><small>项目内对比算法</small><h2>llvc/rvc</h2></div><div><b>ContentVec → 可选音色索引 → 条件合成</b><p>无 F0 权重直接使用内容特征。带 F0 权重还接收 RMVPE 提取并移调后的音高。流式新增窗口 100 ms。</p><code>cmodel1 · fmodel0 + vcmodel4　或　fmodel1 + vcmodel5–10</code></div></div>
+<div class="family"><div><small>项目内对比算法</small><h2>llvc/quickvc</h2></div><div><b>HuBERT-soft → QuickVC 合成器 → 16 kHz 波形</b><p>使用全零 Mel 音色条件，无独立音高提取器。流式新增窗口 100 ms。</p><code>cmodel2 · fmodel0 · vcmodel11</code></div></div>
 </section>
+
 <section id="models" data-title="模型编号与权重" hidden><p class="eyebrow">项目简介</p><h1>模型编号与权重</h1>
 <p class="intro">一个配置由内容特征、F0 提取和转换权重三个位置组成。输出音轨用 vcmodel 标识具体音色权重。</p>
 <div class="dictionary"><div><h3>内容特征 · cmodel</h3><p><code>cmodel0</code> 无独立模型<br><code>cmodel1</code> ContentVec · checkpoint_best_legacy_500.pt<br><code>cmodel2</code> HuBERT-soft · hubert-soft-35d9f29f.pt</p></div><div><h3>音高提取 · fmodel</h3><p><code>fmodel0</code> 无独立 F0 模型<br><code>fmodel1</code> RMVPE · rmvpe.pt</p></div></div>
 <div class="overflow"><table id="catalog"></table></div><p class="caption">白菜357k 在两批试听中均未能加载，表中保留它的配置编号。RVC 的目标性别来自音色配置；LLVC 与 QuickVC 的批次未指定目标性别。</p></section>
-<section id="speed" data-title="全部 RTF" hidden><p class="eyebrow">CPU 性能</p><h1>流式与非流式吞吐</h1>
-<p class="intro">RTF 为累计处理耗时除以累计有效输入时长。每秒输入可用 1 秒计算；数值越小，处理越快。</p><div class="overflow"><table id="rtf"></table></div>
-<p class="caption">Windows 11，CPU 推理，PyTorch 2.5.1，12 线程。每组使用 6 段音频，共 382.189 s；RVC / QuickVC 流式舍去不足整块的尾部，共计 381.900 s。计时包含持续推理所需的预处理、内容与音高提取、检索、合成和后处理，排除文件读写、模型与索引加载。</p></section>
-<section id="cadence" data-title="分块与实时性" hidden><p class="eyebrow">CPU 性能</p><h1>一块输入给模型多少时间？</h1>
-<p class="intro">每块平均耗时低于新增音频时长，链路在本机测量中平均能跟上输入。块长决定了模型最早何时能开始处理这段声音。</p>
-<div class="family"><div><small>13 ms 新输入 · 2 ms 外部历史</small><h2>llvc</h2></div><div><b>每块平均 7.53–12.32 ms</b><p>NC 用时 7.53 ms，标准模型 9.68 ms，HFG 12.32 ms。HFG 每块平均只余 0.68 ms，遇到耗时波动时余量很小。</p></div></div>
-<div class="family"><div><small>100 ms 新输入 · 192 ms 历史</small><h2>llvc/rvc</h2></div><div><b>每块平均 202–320 ms</b><p>六个配置的流式处理均会积压。非流式 RTF 为 0.473–0.599，文件吞吐明显提高。</p></div></div>
-<div class="family"><div><small>100 ms 新输入 · 92 ms 历史</small><h2>llvc/quickvc</h2></div><div><b>每块平均 78.48 ms</b><p>吞吐接近标准 LLVC，但需要多采集 87 ms 输入才凑齐第一块。真实听感时延还取决于发送时机与播放缓冲。</p></div></div></section>
+
+<section id="speed" data-group="性能测量" data-title="全部 RTF" hidden><p class="eyebrow">CPU 性能 · 跨线程总览</p><h1>流式与非流式吞吐（12 线程 vs 2 线程）</h1>
+<p class="intro">RTF 为累计处理耗时除以累计有效输入时长，越小越快（绿色表示快于实时 <code>&lt; 1</code>，橙色表示慢于实时 <code>&gt;= 1</code>）。下方可切换 2 线程受限基准、12 线程默认基准，以及跨线程全景对照。</p>
+<div class="tabs" id="speed-tabs" role="group" aria-label="RTF 视图切换"></div>
+<div class="overflow"><table id="rtf" class="perf-table"></table></div>
+<p class="caption" id="speed-caption"></p></section>
+
+<section id="llvc-tradeoff" data-title="LLVC 块长权衡" hidden><p class="eyebrow">CPU 性能 · LLVC 专题</p><h1>放大块长（13 ms → 52 ms）如何撬动流式余量？</h1>
+<p class="intro">不改动网络权重、不重训、不改变流式缓存范式，仅将 <code>chunk_factor</code> 从 1（13 ms）调至 4（52 ms），每次把 4 个 13 帧局部因果窗口打包计算。在仅用 2 线程的受限条件下，三款 LLVC 流式 RTF 降至 0.270–0.424，反超此前 12 线程 <code>cf=1</code>（0.579–0.948）。</p>
+<div class="overflow"><table id="llvc-table" class="perf-table"></table></div>
+<div class="dictionary"><div><h3>流式 / 非流式倍差大幅收敛</h3><p>12 线程 <code>cf=1</code> 下流式是非流式的 13.3–18.4 倍；2 线程 <code>cf=4</code> 下收敛至 <b>2.55–2.75 倍</b>，单块计算余量达 <b>30.0–38.0 ms</b>，可作为 Python 与后续手机端 C/C++ 的统一基准块长。</p></div><div><h3>数据可比性与波动说明</h3><p><code>v0.2.2</code> 为 LLVC 引入了评估期无损推理缓存（与原版波形误差 ≤ 2.38e-7）。本轮 23:00 时段 <code>llvc</code> 非流式（0.165）略慢于同构的 <code>llvc-hfg</code>（0.108），属系统运行波动，不据此对同构权重排名。</p></div></div>
+<p class="caption">表中条形按 <code>RTF = 1.2</code> 缩放以突出实时阈值（1.0）附近的余量差异；完成即发送 = 块时长 + 均块耗时，不含算法前瞻对齐与播放缓冲。</p></section>
+
+<section id="cadence" data-title="分块与实时性" hidden><p class="eyebrow">CPU 性能 · 算力边界</p><h1>收紧到 2 线程后，谁还跟得上实时输入？</h1>
+<p class="intro">模拟手机端仅分配 2 个大核的受限 CPU 条件：每块平均耗时低于新增块时长才能避免持续积压。下表与卡片合并展示 12 线程与 2 线程下的实时边界变化。</p>
+<div class="family"><div><small>13 ms / 52 ms 新输入 · 2 ms 外部历史</small><h2>llvc</h2></div><div><b>2 线程下唯一保持实时流式：<code>cf=4</code> 均块 14.0–22.0 ms（预算 52 ms）</b><p><code>cf=1</code>（13 ms）在 2 线程下处于临界（11.2–14.0 ms，HFG 略积压）；改用 <code>cf=4</code>（52 ms）后三款变体全部充裕实时，完成即发送参考 66.0–74.0 ms，远低于 100 ms 窗口的对比模型。</p></div></div>
+<div class="family"><div><small>100 ms 新输入 · 92 ms 历史</small><h2>llvc/quickvc</h2></div><div><b>12 线程可实时（78.5 ms） → 2 线程失守积压（121.6 ms）</b><p>非流式对多核最敏感（RTF 从 0.128 升至 0.520，4.07×）；流式在 2 线程下超过 100 ms 预算，无法稳定跟上实时输入。</p></div></div>
+<div class="family"><div><small>100 ms 新输入 · 192 ms 历史</small><h2>llvc/rvc</h2></div><div><b>12 线程与 2 线程全面积压：均块 202–427 ms（预算 100 ms）</b><p>稳态音色（guanguanV1 / zhanzhanv2-xi）在 12 线程与 2 线程下均约 306–320 ms，说明流式链早已串行受限；2 线程下部分配置即便非流式也接近或超过 1.0（0.889–1.316）。</p></div></div>
+<div class="overflow"><table id="cadence-table" class="perf-table"></table></div>
+<p class="caption">数据汇总自 6 个实测批次（43 组配置、258 个已核验 WAV）。所有非流式及 LLVC 流式有效时长 382.189 s；RVC/QuickVC 流式舍去末尾不足整块部分，有效时长 381.900 s。调度参考不等于实测听感端到端延迟。</p></section>
+
 <div id="experiments"></div>
 <div id="dock" hidden><div><small>当前音轨</small><strong id="track-name">尚未选择</strong></div><audio id="player" controls preload="metadata"></audio><label><input type="checkbox" id="sync" checked> 同一输入沿用播放位置</label></div>
 <footer><span id="page-count"></span><div><button id="prev" aria-label="上一页">←</button><button id="next" aria-label="下一页">→</button></div></footer>
